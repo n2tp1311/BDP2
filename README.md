@@ -1,84 +1,79 @@
-# Big Data ML MVP
+# BDP2 – Big Data ML Platform
 
-This project simulates an end-to-end Online Machine Learning pipeline using Hadoop, Kafka, Spark, and MLflow.
+An end-to-end **Online Machine Learning pipeline** simulating a production data system using Hadoop, Kafka, Spark, and MLflow. Data flows from a streaming generator through HDFS into a continually trained PyTorch classifier, with built-in **throughput** and **latency** monitoring.
+
+→ For step-by-step run instructions, see **[WALKTHROUGH.md](./WALKTHROUGH.md)**.
+
+---
 
 ## Architecture
 
-- **Data Source**: A Python script (`src/data_generator.py`) generates mock user events and sends them to Kafka.
-- **Ingestion**: A Spark Structured Streaming job (`src/data_ingestion.py`) reads from Kafka and writes raw data to HDFS in Parquet format.
-- **Training**: A Spark batch job (`src/model_trainer.py`) trains a Challenger model on the accumulated data, evaluates it against the current Champion model (stored in MLflow), and promotes it if it performs better.
-- **Storage**: HDFS is used for data storage.
-- **Orchestration & Resource Management**: YARN manages resources for Spark jobs.
-- **Tracking**: MLflow tracks experiments and manages the model registry.
-
-## Directory Structure
-
 ```
-├── config/             # Configuration files (e.g., hadoop.env)
-├── docker/             # Dockerfiles
-├── src/                # Source code
-│   ├── data_generator.py
-│   ├── data_ingestion.py
-│   └── model_trainer.py
-├── docker-compose.yml  # Docker services definition
-├── requirements.txt    # Python dependencies
-└── README.md           # Project documentation
+data_generator.py
+ (MNIST → Kafka JSON)
+        │
+        ▼  Kafka topic: input_data
+        │
+data_ingestion.py
+ (Spark Streaming → HDFS Parquet)
+        │
+        ▼  hdfs://namenode:9000/data/raw
+        │
+pytorch_trainer.py
+ (Spark batch → MLP training → MLflow)
+        │
+        ▼
+MLflow Model Registry
+ (Champion / Challenger promotion)
 ```
 
-## Setup & Usage
+---
 
-### Prerequisites
-- Docker and Docker Compose installed.
+## Components
 
-### 1. Start Infrastructure
-```bash
-docker-compose up -d --build
-```
-This will start Zookeeper, Kafka, HDFS (Namenode, Datanode), YARN (ResourceManager, NodeManager), Spark (Master, Worker), MLflow (Server, DB), and HistoryServer.
+| Service | Role |
+|---------|------|
+| **Kafka** | Streams MNIST feature messages from generator |
+| **HDFS** | Stores Parquet files (features + metrics columns) |
+| **YARN** | Resource manager for Spark jobs |
+| **Spark Streaming** | Ingests from Kafka, computes latency, writes Parquet |
+| **Spark Batch** | Reads HDFS, trains MLP, promotes best model |
+| **PyTorch MLP** | `Input(64) → FC(32) → ReLU → FC(16) → ReLU → FC(10)` |
+| **MLflow** | Experiment tracking + Model Registry |
 
-### 2. Install Dependencies
-You can install the Python dependencies locally to run scripts or for development (though scripts are designed to run in the Spark container).
-```bash
-pip install -r requirements.txt
-```
+---
 
-### 3. Run the Pipeline
+## Parquet Schema (HDFS)
 
-**Step 1: Install dependencies in Spark container**
-```bash
-docker exec spark-master pip install -r /app/requirements.txt
-```
+| Column | Type | Description |
+|--------|------|-------------|
+| `pixel_0` … `pixel_63` | Double | Flattened 8×8 MNIST pixel values |
+| `label` | Integer | Digit class (0–9) |
+| `produce_timestamp` | Double | Unix epoch when message was generated |
+| `ingest_timestamp` | Timestamp | Spark processing time |
+| `latency_ms` | Double | `(ingest_timestamp − produce_timestamp) × 1000` |
 
-**Step 2: Start Data Generator**
-Run this in a separate terminal (locally or inside a container).
-```bash
-# Locally (requires pip install -r requirements.txt)
-python src/data_generator.py --bootstrap-servers localhost:9092
+---
 
-# Or inside Spark Master container
-docker exec -it spark-master python /app/src/data_generator.py --bootstrap-servers kafka:29092
-```
+## Source Files
 
-**Step 3: Submit Data Ingestion Job**
-Submits the streaming job to Spark.
-```bash
-docker exec spark-master /opt/spark/bin/spark-submit \
-  --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0 \
-  /app/src/data_ingestion.py
-```
+| File | Description |
+|------|-------------|
+| `src/data_generator.py` | Generates MNIST data → Kafka (includes `produce_timestamp`) |
+| `src/data_ingestion.py` | Spark Streaming: Kafka → Parquet + computes `latency_ms` |
+| `src/pytorch_trainer.py` | Continual learning trainer with champion/challenger promotion |
+| `src/monitor_pipeline.py` | Live throughput (records/sec) and latency stats |
+| `src/reset_pipeline.py` | Wipe HDFS, Kafka, MLflow to start fresh |
+| `src/sql_analytics.py` | Spark SQL analytics on ingested data |
 
-**Step 4: Train & Evaluate Model**
-Run this periodically to train a new model on fresh data.
-```bash
-docker exec spark-master /opt/spark/bin/spark-submit \
-  --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0 \
-  /app/src/model_trainer.py
-```
+---
 
-## Access UIs
+## Web UIs
 
-- **HDFS**: http://localhost:9870
-- **YARN**: http://localhost:8088
-- **Spark Master**: http://localhost:8080
-- **MLflow**: http://localhost:5001
-- **Kafka UI**: http://localhost:8085
+| Dashboard | URL |
+|-----------|-----|
+| HDFS NameNode | http://localhost:9870 |
+| Spark Master | http://localhost:8080 |
+| YARN Resource Manager | http://localhost:8088 |
+| MLflow | http://localhost:5001 |
+| Kafka UI | http://localhost:8085 |

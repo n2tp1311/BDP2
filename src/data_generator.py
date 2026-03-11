@@ -17,6 +17,7 @@ def generate_mnist_data():
         # Create feature dictionary: pixel_0 to pixel_63
         data = {f"pixel_{i}": val for i, val in enumerate(image_flat)}
         data["label"] = label
+        data["produce_timestamp"] = time.time()  # Unix epoch (seconds) when message was created
         yield data
 
 def main(topic, bootstrap_servers, interval, limit=None):
