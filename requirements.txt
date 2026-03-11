@@ -1,0 +1,9 @@
+pyspark==3.5.0
+kafka-python
+scikit-learn
+torch
+torchvision
+mlflow
+pandas
+matplotlib
+packaging<25

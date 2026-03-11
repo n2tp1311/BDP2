@@ -1,0 +1,19 @@
+FROM apache/spark:3.5.0
+
+USER root
+
+# Install system dependencies if needed (e.g., for scikit-learn/numpy)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements and install
+COPY requirements.txt /requirements.txt
+RUN pip3 install --no-cache-dir -r /requirements.txt
+
+# Create ivy2 cache directory with correct permissions
+RUN mkdir -p /home/spark/.ivy2/cache && \
+    chown -R spark:spark /home/spark/.ivy2
+
+# Return to spark user
+USER spark

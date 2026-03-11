@@ -1,0 +1,17 @@
+# Planning & internal docs (not for repo)
+docs/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
